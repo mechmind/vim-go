@@ -13,39 +13,32 @@ endfunction
 " default it tries to call simply 'go build', but it first tries to get all
 " dependent files for the current folder and passes it to go build.
 function! go#cmd#Build(bang, ...)
-    let default_makeprg = &makeprg
-
     let old_gopath = $GOPATH
     let $GOPATH = go#path#Detect()
 
-    if v:shell_error
-        let &makeprg = "go build . errors"
-    else
-        " :make expands '%' and '#' wildcards, so they must also be escaped
-        let goargs = go#util#Shelljoin(map(copy(a:000), "expand(v:val)"), 1)
-        let gofiles = go#util#Shelljoin(go#tool#Files(), 1)
-        let &makeprg = "go build -o /dev/null " . goargs . ' ' . gofiles
-    endif
+    let command = "go build ."
+
+    call go#cmd#autowrite()
 
     echon "vim-go: " | echohl Identifier | echon "building ..."| echohl None
-    if g:go_dispatch_enabled && exists(':Make') == 2
-        silent! exe 'Make'
-    else
-        silent! exe 'make!'
-    endif
-    redraw!
+    redraw
 
-    cwindow
-    let errors = getqflist()
-    if !empty(errors) 
-        if !a:bang
+    let out = go#tool#ExecuteInDir(command)
+    if v:shell_error
+        call go#tool#ShowErrors(out)
+        cwindow
+        let errors = getqflist()
+        if !empty(errors) && !a:bang
             cc 1 "jump to first error if there is any
         endif
+        echon "vim-go: " | echohl ErrorMsg | echon "[build] FAIL" | echohl None
     else
-        redraws! | echon "vim-go: " | echohl Function | echon "[build] SUCCESS"| echohl None
+        call setqflist([])
+        cwindow
+
+        echon "vim-go: " | echohl Function | echon "[build] SUCCESS" | echohl None
     endif
 
-    let &makeprg = default_makeprg
     let $GOPATH = old_gopath
 endfunction
 
